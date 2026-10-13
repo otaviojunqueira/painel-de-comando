@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Abre o Painel de Comando: sobe o serviço local (se ainda não estiver rodando) e abre a janela do painel.
+# Uso: painel            abre o serviço e a janela
+#      painel --servidor só garante que o serviço está rodando
+DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+CFG="${PAINEL_HOME:-$HOME/.config/painel}"
+[ -f "$CFG/env" ] && . "$CFG/env"
+NODE="${PAINEL_NODE:-$(command -v node)}"
+PORT="${PAINEL_PORT:-4777}"
+
+aviso() { command -v notify-send >/dev/null 2>&1 && notify-send "Painel de Comando" "$1"; echo "$1" >&2; }
+
+if [ -z "$NODE" ] || [ ! -x "$NODE" ]; then
+  aviso "Não encontrei o Node. Rode install.sh de novo, num terminal onde o comando node funcione."
+  exit 1
+fi
+
+mkdir -p "$CFG"; chmod 700 "$CFG"
+no_ar() { (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; }
+
+if ! no_ar; then
+  setsid nohup "$NODE" "$DIR/server/server.js" >> "$CFG/painel.log" 2>&1 < /dev/null &
+  for _ in $(seq 1 60); do no_ar && break; sleep 0.1; done
+  if ! no_ar; then aviso "O serviço não subiu. Veja o log em $CFG/painel.log"; exit 1; fi
+fi
+
+[ "$1" = "--servidor" ] && exit 0
+
+# Janela nativa (Electron), se instalada. O --no-sandbox precisa vir na linha de comando.
+unset ELECTRON_RUN_AS_NODE
+ELECTRON="$DIR/node_modules/electron/dist/electron"
+if [ -x "$ELECTRON" ]; then
+  exec "$ELECTRON" --no-sandbox "$DIR"
+fi
+
+# Plano B: navegador baseado em Chromium, em modo aplicativo.
+
+TOKEN="$(cat "$CFG/token" 2>/dev/null)"
+URL="http://127.0.0.1:$PORT/?t=$TOKEN"
+for b in chromium chromium-browser google-chrome google-chrome-stable brave-browser microsoft-edge vivaldi vivaldi-stable opera; do
+  if command -v "$b" >/dev/null 2>&1; then
+    exec "$b" --app="$URL" --window-size=1360,840
+  fi
+done
+aviso "Não achei a janela nativa nem um navegador baseado em Chromium. Abra no navegador: $URL"
+command -v xdg-open >/dev/null 2>&1 && xdg-open "$URL"

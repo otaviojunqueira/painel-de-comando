@@ -1,0 +1,3 @@
+#!/bin/sh
+# Dentro do Painel de Comando, "gnome-terminal --tab ..." abre abas do painel em vez de janelas do GNOME.
+exec "${PAINEL_NODE:-node}" "$(dirname "$0")/gnome-terminal.js" "$@"

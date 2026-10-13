@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de Comando</title>
+<link rel="icon" href="/icone.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/vendor/xterm.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand">Painel <span>de Comando</span></div>
+    <nav id="tabs" role="tablist" aria-label="Projetos"></nav>
+    <button class="ghost" id="theme" type="button" aria-label="Alternar entre tema claro e escuro">Tema</button>
+  </header>
+  <div class="banner" id="lost" role="alert" hidden>Perdi a conexão com o serviço do painel. Seus terminais continuam rodando. Tentando reconectar…</div>
+  <main class="main">
+    <aside id="side" aria-label="Conexões, ações, informações e anotações do projeto">
+      <div id="sideMain"></div>
+      <div id="notes"></div>
+    </aside>
+    <div id="split" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Largura da coluna lateral. Setas esquerda e direita ajustam, Home restaura" aria-valuemin="240" aria-valuemax="620" aria-valuenow="300" title="Arraste para ajustar. Duplo clique restaura"></div>
+    <section id="termArea" aria-label="Terminais">
+      <div class="ttabs" id="ttabs"></div>
+      <div class="termwrap" id="termwrap">
+        <div id="thosts"></div>
+        <div id="tempty" class="empty" hidden></div>
+      </div>
+    </section>
+  </main>
+  <footer class="foot" id="foot"></footer>
+</div>
+<div id="modal" aria-hidden="true"></div>
+<div id="toasts" role="status" aria-live="polite"></div>
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
