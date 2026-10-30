@@ -23,7 +23,7 @@ function h(tag, attrs, ...kids) {
 const uid = (p) => p + Math.random().toString(36).slice(2, 8);
 const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 
-let fonte = 13, foco = false;
+let view = 'term', fonte = 13, foco = false;
 try { fonte = Math.min(28, Math.max(9, +localStorage.getItem('painel-fonte') || 13)); foco = localStorage.getItem('painel-foco') === '1'; } catch (_) {}
 let data = null, sessions = {}, bufs = {}, terms = {}, cur = null, activeId = {}, reveal = {}, copied = {}, ws = null, wsOk = false;
 const proj = () => (data ? data.projetos.find((p) => p.id === cur) : null);
@@ -38,6 +38,14 @@ const ICONS = {
   plus: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
   expand: 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z',
   shrink: 'M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z',
+  folder: 'M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z',
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z',
+  up: 'M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z',
+  refresh: 'M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z',
+  newfolder: 'M20 6h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z',
+  upload: 'M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z',
+  download: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z',
+  close: 'M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
   plusbox: 'M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z',
 };
 function icon(n) {
@@ -70,6 +78,7 @@ function save() {
 }
 
 /* ---------- conexão com o serviço ---------- */
+function sendOk(o) { if (ws && ws.readyState === 1) { ws.send(JSON.stringify(o)); return true; } return false; }
 function send(o) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
   else if (o.t === 'rodar') toast('Sem conexão com o serviço do painel. Tentando reconectar…', true);
@@ -81,6 +90,7 @@ function connect() {
   ws.onclose = () => { wsOk = false; $('#lost').hidden = false; drawFoot(); setTimeout(connect, 1500); };
 }
 function onMsg(m) {
+  if (m.t && m.t.startsWith('fs')) { Arquivos.on(m); return; }
   if (m.t === 'init') {
     const novos = {};
     m.sessoes.forEach((s) => { novos[s.id] = s; });
@@ -99,6 +109,7 @@ function onMsg(m) {
     const novo = !sessions[m.s.id];
     sessions[m.s.id] = m.s;
     if (novo && bufs[m.s.id] == null) bufs[m.s.id] = '';
+    if (novo && m.s.projeto === cur) view = 'term';
     if (novo && m.s.projeto === cur && (!m.s.pai || !filhosDe(m.s.pai).some((x) => x.id !== m.s.id && activeId[cur] === x.id))) activeId[cur] = m.s.id;
     redrawAll(novo && m.s.projeto === cur);
     if (!novo && m.s.status === 'encerrado' && m.s.tipo === 'acao' && !m.s.parada && !filhosDe(m.s.id).length) {
@@ -137,6 +148,7 @@ function modal(o) {
     for (const k in inputs) v[k] = inputs[k].value;
     for (const f of o.fields || []) {
       if (f.required && !String(v[f.id]).trim()) { err.textContent = 'Preencha “' + f.label + '”.'; inputs[f.id].focus(); return; }
+      if (f.equals && String(v[f.id]).trim().toLowerCase() !== f.equals) { err.textContent = 'Digite “' + f.equals + '” para confirmar.'; inputs[f.id].focus(); return; }
     }
     close();
     if (o.onSubmit) o.onSubmit(v);
@@ -214,11 +226,12 @@ function formConexao(p, c) {
     title: c ? 'Editar conexão' : 'Nova conexão',
     fields: [
       { id: 'rotulo', label: 'Nome', value: c ? c.rotulo : '', required: true, hint: 'Exemplo: Servidor (SSH)' },
-      { id: 'cmd', label: 'Comando', type: 'textarea', mono: true, rows: 2, value: c ? c.cmd : '', required: true, hint: 'Exemplo: ssh usuario@servidor' },
+      { id: 'cmd', label: 'Comando', type: 'textarea', mono: true, rows: 2, value: c ? c.cmd : '', required: true, hint: 'Exemplo: ssh usuario@servidor. A aba Arquivos usa este mesmo comando.' },
+      { id: 'ambiente', label: 'Ambiente do servidor', type: 'select', value: c ? c.ambiente || '' : '', options: [['', 'Nenhum'], ['homologacao', 'Homologação (pede confirmação ao enviar)'], ['producao', 'Produção (confirmação reforçada)']] },
     ],
     extra: c ? { label: 'Remover conexão', onClick: () => delConexao(p, c) } : null,
     onSubmit: (v) => {
-      const novo = { id: c ? c.id : uid('c'), rotulo: v.rotulo.trim(), cmd: v.cmd.trim() };
+      const novo = { id: c ? c.id : uid('c'), rotulo: v.rotulo.trim(), cmd: v.cmd.trim(), ambiente: v.ambiente };
       if (c) Object.assign(c, novo); else p.conexoes.push(novo);
       save(); redrawAll();
     },
@@ -325,6 +338,7 @@ function selectProject(id) {
   cur = id;
   try { localStorage.setItem('painel-projeto', id); } catch (_) {}
   redrawAll(); drawNotes();
+  if (view === 'files') Arquivos.mostrar();
 }
 
 /* ---------- desenho: coluna lateral ---------- */
@@ -352,9 +366,10 @@ function acaoCard(p, a) {
 function conexaoCard(p, c) {
   const s = sessFor(p.id, 'conexao', c.id), on = s && s.status === 'rodando';
   return h('div', { class: 'card' },
-    h('div', { class: 'head' }, h('span', { class: 'name' }, c.rotulo), btnsHead(() => formConexao(p, c), () => delConexao(p, c), 'conexão')),
+    h('div', { class: 'head' }, h('div', null, h('div', { class: 'name' }, c.rotulo), c.ambiente ? h('span', { class: 'pill ' + (c.ambiente === 'producao' ? 'prod' : 'hml') }, c.ambiente === 'producao' ? 'Produção' : 'Homologação') : null), btnsHead(() => formConexao(p, c), () => delConexao(p, c), 'conexão')),
     h('div', { class: 'cmd' }, c.cmd),
-    h('div', { class: 'row' }, h('button', { class: 'btn', 'data-k': 'ssh-' + c.id, onclick: () => (on ? showSession(s.id, true) : rodar(p.id, 'conexao', c.id)) }, on ? 'Ver terminal' : 'Abrir SSH')));
+    h('div', { class: 'row' }, h('button', { class: 'btn', 'data-k': 'ssh-' + c.id, onclick: () => (on ? showSession(s.id, true) : rodar(p.id, 'conexao', c.id)) }, on ? 'Ver terminal' : 'Abrir SSH'),
+      h('button', { class: 'btn', 'data-k': 'arq-' + c.id, onclick: () => { Arquivos.abrir(c.id); setView('files'); } }, icon('folder'), 'Arquivos')));
 }
 const TIPOS = { usuario: 'Usuário e senha', texto: 'Texto', link: 'Link', segredo: 'Segredo' };
 function valBox(txt, rot, k, oculto, link) {
@@ -484,21 +499,28 @@ function drawTermTabs() {
   const p = proj(), box = $('#ttabs');
   if (!p) { box.replaceChildren(); return; }
   const act = currentSession();
-  const lista = h('div', { class: 'tlist', role: 'tablist', 'aria-label': 'Terminais do projeto' }, visiveis(p.id).map((s) => {
-    const on = act && act.id === s.id;
+  const arq = h('div', { class: 'ttab tarq' + (view === 'files' ? ' on' : '') },
+    h('button', { class: 't', role: 'tab', 'aria-selected': String(view === 'files'), 'data-k': 'tab-arquivos', onclick: () => setView('files') }, icon('folder'), 'Arquivos'));
+  const lista = h('div', { class: 'tlist', role: 'tablist', 'aria-label': 'Terminais e arquivos do projeto' }, [arq, ...visiveis(p.id).map((s) => {
+    const on = view === 'term' && act && act.id === s.id;
     const fechavel = s.status !== 'rodando' || s.tipo === 'conexao' || s.tipo === 'aba' || s.tipo === 'livre';
     return h('div', { class: 'ttab' + (on ? ' on' : '') },
       h('button', { class: 't', role: 'tab', 'aria-selected': String(!!on), onclick: () => showSession(s.id, true) }, s.titulo),
       fechavel ? h('button', { class: 'x', title: 'Fechar terminal', 'aria-label': 'Fechar terminal ' + s.titulo, onclick: () => send({ t: 'fechar', id: s.id }) }, '×') : null);
-  }));
+  })]);
   lista.appendChild(h('button', { class: 'icon newt', title: 'Novo terminal (shell livre nesta pasta)', 'aria-label': 'Novo terminal', 'data-k': 'newterm', onclick: () => send({ t: 'novo-terminal', projeto: p.id }) }, icon('plusbox')));
   const ctl = h('div', { class: 'tctl' },
-    act ? h('span', { class: 'tstate' }, stateText(act)) : null,
-    h('button', { class: 'icon', title: 'Diminuir a letra (Ctrl+−)', 'aria-label': 'Diminuir a letra do terminal', onclick: () => setFonte(fonte - 1) }, 'A−'),
-    h('span', { class: 'flbl', id: 'fontLbl', title: 'Tamanho da letra. Ctrl+0 volta ao padrão' }, fonte + ' px'),
-    h('button', { class: 'icon', title: 'Aumentar a letra (Ctrl++)', 'aria-label': 'Aumentar a letra do terminal', onclick: () => setFonte(fonte + 1) }, 'A+'),
+    view === 'term' && act ? h('span', { class: 'tstate' }, stateText(act)) : null,
+    view === 'term' ? h('button', { class: 'icon', title: 'Diminuir a letra (Ctrl+−)', 'aria-label': 'Diminuir a letra do terminal', onclick: () => setFonte(fonte - 1) }, 'A−') : null,
+    view === 'term' ? h('span', { class: 'flbl', id: 'fontLbl', title: 'Tamanho da letra. Ctrl+0 volta ao padrão' }, fonte + ' px') : null,
+    view === 'term' ? h('button', { class: 'icon', title: 'Aumentar a letra (Ctrl++)', 'aria-label': 'Aumentar a letra do terminal', onclick: () => setFonte(fonte + 1) }, 'A+') : null,
     h('button', { class: 'icon', title: foco ? 'Mostrar a coluna lateral' : 'Ampliar o terminal (esconde a coluna lateral)', 'aria-label': foco ? 'Mostrar a coluna lateral' : 'Ampliar o terminal', 'aria-pressed': String(foco), onclick: () => setFoco(!foco) }, icon(foco ? 'shrink' : 'expand')));
   box.replaceChildren(lista, ctl);
+}
+function applyView() { $('#termwrap').hidden = view === 'files'; $('#files').hidden = view !== 'files'; }
+function setView(v) {
+  view = v; applyView(); drawTermTabs();
+  if (v === 'files') Arquivos.mostrar(); else { const s = currentSession(); updateHosts(true); if (s) fitTerm(s.id); }
 }
 function updateHosts(focus) {
   const s = currentSession(), empty = $('#tempty');
@@ -519,6 +541,7 @@ function showSession(id, focus) {
   const p = proj();
   if (!p) return;
   activeId[p.id] = id;
+  if (view !== 'term') { view = 'term'; applyView(); }
   drawTermTabs(); updateHosts(focus);
 }
 function drawFoot() {
@@ -528,7 +551,8 @@ function drawFoot() {
 function redrawAll(focusTerm) {
   if (!data) return;
   if (!cur || !proj()) cur = data.projetos[0] ? data.projetos[0].id : null;
-  drawTabs(); drawSide(); drawTermTabs(); updateHosts(!!focusTerm); drawFoot();
+  drawTabs(); drawSide(); drawTermTabs(); applyView(); updateHosts(!!focusTerm); drawFoot();
+  if (view === 'files') Arquivos.redraw();
 }
 
 /* ---------- divisor e atalhos ---------- */
@@ -574,6 +598,7 @@ setInterval(() => {
 }, 1000);
 
 /* ---------- início ---------- */
+Arquivos.init({ h, icon, modal, confirmar, toast, proj, sendOk, root: $('#files') });
 fetch('/api/dados', { headers: { 'X-Painel': '1' } })
   .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
   .then((d) => {

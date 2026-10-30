@@ -31,6 +31,16 @@ Se o Electron não puder ser baixado, o painel abre num navegador baseado em Chr
 - **Info em destaque:** cada informação é um cartão com borda, nome em negrito e tipo. Tipo novo "Usuário e senha" (login, senha oculta, copiar separado).
 - **Tamanho do terminal:** A− / A+ (ou Ctrl++, Ctrl+-, Ctrl+0, Ctrl+roda do mouse), divisor arrastável entre coluna lateral e terminal, e botão para ampliar o terminal.
 
+## Aba Arquivos (como um FileZilla dentro do painel)
+
+- Abra pela aba **Arquivos**, ao lado dos terminais, ou pelo botão **Arquivos** no cartão da conexão. Ela usa o mesmo comando SSH da conexão (`ssh -p 22 -i ~/.ssh/chave usuario@servidor`), então não há nada novo para cadastrar.
+- Duas colunas: seu computador à esquerda, servidor à direita. **Enviar** e **Baixar**, ou arraste de um lado para o outro (soltar sobre uma pasta envia para dentro dela). Fila de transferências com progresso e cancelamento. Criar pasta, renomear (F2) e excluir (Delete).
+- Segurança: na primeira conexão o painel mostra a impressão digital do servidor para você confirmar; se a chave do servidor mudar, ele recusa. Senhas e frases de chave ficam só na memória, nunca em disco. Nada é sobrescrito sem você confirmar, e permissões (como o executável de scripts `.sh`) são mantidas no envio.
+- Em **Editar conexão** há o campo **Ambiente do servidor**. Em homologação, todo envio pede confirmação. Em produção a confirmação é reforçada e excluir exige digitar `apagar`.
+- Ainda não faz: abrir arquivos remotos para editar, soltar arquivos vindos do gerenciador de arquivos do sistema (Nautilus), conexões com ProxyJump.
+
+No topo de cada lista há uma linha ".." (duplo clique volta uma pasta; também dá para soltar arquivos nela). Na aba Arquivos, as colunas da lista (Tamanho, Modificado, Permissões) e a divisão entre "Seu computador" e "Servidor" podem ser redimensionadas arrastando. Duplo clique no puxador restaura o tamanho padrão, e as setas esquerda/direita ajustam a divisão pelo teclado. Os tamanhos ficam salvos.
+
 ## Onde ficam os dados
 
 `~/.config/painel/painel.json` (permissão 600, em texto simples). A última versão anterior fica em `painel.json.bak`. A chave de acesso fica em `~/.config/painel/token`. Não coloque essa pasta em um repositório git.

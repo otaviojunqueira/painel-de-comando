@@ -69,7 +69,7 @@ function normalize(d) {
       ambiente: a.ambiente === 'homologacao' || a.ambiente === 'producao' ? a.ambiente : '',
       destino: str(a.destino, 200),
     }), 'a'),
-    conexoes: list(p.conexoes, 50, (c, id) => ({ id: id(c.id), rotulo: str(c.rotulo, 100) || 'Conexão', cmd: str(c.cmd, 1000) }), 'c'),
+    conexoes: list(p.conexoes, 50, (c, id) => ({ id: id(c.id), rotulo: str(c.rotulo, 100) || 'Conexão', cmd: str(c.cmd, 1000), ambiente: c.ambiente === 'homologacao' || c.ambiente === 'producao' ? c.ambiente : '' }), 'c'),
     info: list(p.info, 500, (i, id) => ({
       id: id(i.id),
       rotulo: str(i.rotulo, 100) || 'Sem nome',
@@ -147,6 +147,15 @@ function broadcast(msg) {
 function killGroup(s, sig) {
   try { process.kill(-s.pty.pid, sig); } catch (_) { try { s.pty.kill(sig); } catch (_) {} }
 }
+const arquivos = require('./arquivos')({
+  broadcast,
+  cfgDir: CFG,
+  achar: (pid, cid) => {
+    const p = data && data.projetos.find((x) => x.id === pid);
+    const c = p && p.conexoes.find((x) => x.id === cid);
+    return c ? { p, c } : null;
+  },
+});
 const filhos = (id) => [...sessions.values()].filter((x) => x.pai === id);
 function removeSession(id) {
   const s = sessions.get(id);
@@ -244,7 +253,8 @@ wss.on('connection', (ws) => {
     let m;
     try { m = JSON.parse(String(raw)); } catch (_) { return; }
     if (!m || typeof m !== 'object') return;
-    if (m.t === 'rodar') {
+    if (m.t === 'fs') arquivos.handle(ws, m);
+    else if (m.t === 'rodar') {
       const r = runSession(String(m.projeto), m.tipo === 'conexao' ? 'conexao' : 'acao', String(m.ref));
       if (r.erro) ws.send(JSON.stringify({ t: 'erro', msg: r.erro }));
     } else if (m.t === 'novo-terminal') {
@@ -352,6 +362,7 @@ server.on('error', (e) => {
 server.listen(PORT, '127.0.0.1', () => console.log(`Painel de Comando em http://127.0.0.1:${PORT}  (dados em ${CFG})`));
 
 function sair() {
+  try { arquivos.fechar(); } catch (_) {}
   for (const s of sessions.values()) if (s.status === 'rodando') killGroup(s, 'SIGHUP');
   process.exit(0);
 }
